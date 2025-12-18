@@ -1,13 +1,20 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, field_validator
-from prometheus_client import Counter, Histogram, generate_latest
+from prometheus_client import generate_latest
 from starlette.responses import Response, HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
-from openai import OpenAI
 import asyncio
 import logging
 import os
 import time
+from openai import RateLimitError
+from app.metrics import (
+    REQUEST_COUNT,
+    REQUEST_LATENCY,
+    ERROR_COUNT,
+    REQUEST_COST_USD
+)
+from app.model import generate_response
 
 # --------------------------------------------------
 # App setup
@@ -27,24 +34,6 @@ app.add_middleware(
 # --------------------------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# --------------------------------------------------
-# Prometheus metrics (best-practice naming)
-# --------------------------------------------------
-REQUEST_COUNT = Counter(
-    "http_requests_total",
-    "Total number of HTTP requests"
-)
-
-REQUEST_LATENCY = Histogram(
-    "http_request_latency_seconds",
-    "HTTP request latency in seconds"
-)
-
-ERROR_COUNT = Counter(
-    "http_request_errors_total",
-    "Total number of failed HTTP requests"
-)
 
 # --------------------------------------------------
 # Models
@@ -67,12 +56,6 @@ class PredictResponse(BaseModel):
 
 
 # --------------------------------------------------
-# OpenAI client
-# --------------------------------------------------
-logger.info(f"OPENAI_API_KEY set: {bool(os.getenv('OPENAI_API_KEY'))}")
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-# --------------------------------------------------
 # Routes
 # --------------------------------------------------
 @app.post("/predict", response_model=PredictResponse)
@@ -81,15 +64,20 @@ async def predict(req: PredictRequest):
     start_time = time.time()
 
     try:
-        # Run blocking OpenAI call in thread to avoid blocking event loop
-        response = await asyncio.to_thread(
-            client.chat.completions.create,
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": req.text}],
-        )
+        output = await generate_response(req.text)
 
-        output = response.choices[0].message.content
+        # Rough cost estimation (demo purpose)
+        REQUEST_COST_USD.inc(0.002)
+
         return {"output": output}
+
+    except RateLimitError:
+        ERROR_COUNT.inc()
+        logger.warning("LLM quota exceeded")
+        raise HTTPException(
+            status_code=429,
+            detail="LLM quota exceeded. Try again later."
+        )
 
     except Exception:
         ERROR_COUNT.inc()
