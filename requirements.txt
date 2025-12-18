@@ -3,3 +3,4 @@ uvicorn
 prometheus-client
 pydantic
 openai
+huggingface_hub
