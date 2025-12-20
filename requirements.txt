@@ -3,3 +3,4 @@ uvicorn[standard]
 prometheus-client
 pydantic
 huggingface-hub
+requests
