@@ -88,15 +88,75 @@ Response example
 **Metrics**
 - Prometheus-compatible metrics are exposed at `/metrics`.
 
+**Dashboard & Monitoring**
+You can inspect the app via the built-in OpenAPI docs and scrape metrics with Prometheus. Quick steps:
+
+- OpenAPI (interactive): http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+- Health: http://localhost:8000/health
+- Metrics (Prometheus): http://localhost:8000/metrics
+
+Quick verification commands:
+
+```bash
+curl -i http://localhost:8000/health
+curl -s http://localhost:8000/metrics | head -n 50
+```
+
+Optional: Prometheus + Grafana
+1. Add the `docker-compose.yml` below to run Prometheus and Grafana locally and scrape this app.
+2. Start the stack and then open Grafana at `http://localhost:3000` (default creds: `admin`/`admin`).
+
+Example `docker-compose.yml` (drop in project root):
+
+```yaml
+version: '3.8'
+services:
+  app:
+    image: genai-platform
+    build: .
+    ports:
+      - '8000:8000'
+    environment:
+      - HF_API_TOKEN=${HF_API_TOKEN}
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - '9090:9090'
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - '3000:3000'
+    depends_on:
+      - prometheus
+```
+
+Minimal `prometheus.yml` (scrape the app):
+
+```yaml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'genai_app'
+    static_configs:
+      - targets: ['app:8000']
+    metrics_path: /metrics
+```
+
+Start everything:
+
+```bash
+docker compose up --build
+```
+
+Then open Grafana at `http://localhost:3000` and add Prometheus (`http://prometheus:9090`) as a data source; import or create dashboards to visualize `http_request_latency_seconds`, `http_requests_total`, etc.
+
 **Troubleshooting**
 - Blank browser / cannot reach service: ensure container is running and port is published: `docker ps` and verify `0.0.0.0:8000->8000/tcp` is present.
 - If the container starts then exits, fetch logs: `docker ps -a` then `docker logs <container-id>`.
 - If `docker-compose` command not found, use `docker compose` (space) after starting Docker daemon or install the plugin.
-
-**Next steps / suggestions**
-- Pin dependency versions in `requirements.txt` for reproducible builds.
-- Add basic logging around external API calls for easier debugging.
-- Add unit tests for the endpoints.
-
----
-If you want, I can add a short example `docker-compose.yml` or pin dependency versions next. Tell me which you'd prefer.
