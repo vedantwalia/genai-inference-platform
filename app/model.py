@@ -1,32 +1,26 @@
-import asyncio
-import logging
 import os
-from openai import OpenAI, RateLimitError
+import logging
+from huggingface_hub import InferenceClient
 
 logger = logging.getLogger(__name__)
 
-# OpenAI client
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = InferenceClient(
+    model="google/flan-t5-base",
+    token=os.getenv("HF_API_TOKEN"),
+)
 
-async def generate_response(prompt: str) -> str:
+def generate_response(prompt: str) -> str:
     """
-    Generate a response from the LLM.
-    Runs blocking SDK call in a thread to avoid blocking the event loop.
+    Synchronous Hugging Face inference.
+    FastAPI will run this in a threadpool automatically.
     """
-
     try:
-        response = await asyncio.to_thread(
-            client.chat.completions.create,
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
+        response = client.text_generation(
+            prompt,
+            max_new_tokens=128,
         )
-
-        return response.choices[0].message.content
-
-    except RateLimitError:
-        logger.warning("OpenAI quota exhausted")
-        raise
+        return response.strip()
 
     except Exception:
-        logger.exception("LLM inference failed")
+        logger.exception("HF inference failed")
         raise
