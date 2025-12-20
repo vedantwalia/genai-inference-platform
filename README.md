@@ -14,7 +14,8 @@
 - `app/main.py` — FastAPI app and endpoints
 
 **Environment**
-- `OPENAI_API_KEY` — (optional) if you configure the app to call OpenAI. Set this in your environment before running the container if needed.
+- `HF_API_TOKEN` — Hugging Face API token (set in your environment for private models). Optional for public models.
+- `HF_MODEL` — (optional) model repo id to use, e.g. `google/flan-t5-base`. Defaults to `google/flan-t5-base`.
 
 **Local (dev) quickstart**
 1. Create and activate a virtualenv (optional):

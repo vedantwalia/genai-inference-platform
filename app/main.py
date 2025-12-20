@@ -3,16 +3,14 @@ from pydantic import BaseModel, field_validator
 from prometheus_client import generate_latest
 from starlette.responses import Response, HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
-import asyncio
 import logging
-import os
 import time
-from openai import RateLimitError
+
 from app.metrics import (
     REQUEST_COUNT,
     REQUEST_LATENCY,
     ERROR_COUNT,
-    REQUEST_COST_USD
+    REQUEST_COST_USD,
 )
 from app.model import generate_response
 
@@ -21,7 +19,7 @@ from app.model import generate_response
 # --------------------------------------------------
 app = FastAPI(title="GenAI Inference Platform")
 
-# CORS (development only – restrict origins in prod)
+# CORS (dev only – restrict in prod)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -59,25 +57,15 @@ class PredictResponse(BaseModel):
 # Routes
 # --------------------------------------------------
 @app.post("/predict", response_model=PredictResponse)
-async def predict(req: PredictRequest):
+def predict(req: PredictRequest):
     REQUEST_COUNT.inc()
     start_time = time.time()
 
     try:
-        output = await generate_response(req.text)
+        output = generate_response(req.text)
 
-        # Rough cost estimation (demo purpose)
-        REQUEST_COST_USD.inc(0.002)
-
+        REQUEST_COST_USD.inc(0.0)
         return {"output": output}
-
-    except RateLimitError:
-        ERROR_COUNT.inc()
-        logger.warning("LLM quota exceeded")
-        raise HTTPException(
-            status_code=429,
-            detail="LLM quota exceeded. Try again later."
-        )
 
     except Exception:
         ERROR_COUNT.inc()
@@ -85,11 +73,11 @@ async def predict(req: PredictRequest):
         raise HTTPException(status_code=500, detail="Inference failed")
 
     finally:
-        REQUEST_LATENCY.observe(max(0.0, time.time() - start_time))
+        REQUEST_LATENCY.observe(time.time() - start_time)
 
 
 @app.get("/health")
-async def health():
+def health():
     return {"status": "ok"}
 
 
@@ -97,13 +85,13 @@ async def health():
 def metrics():
     return Response(
         generate_latest(),
-        media_type="text/plain; version=0.0.4; charset=utf-8"
+        media_type="text/plain; version=0.0.4; charset=utf-8",
     )
 
 
 @app.get("/", response_class=HTMLResponse)
 def index():
-    html = """
+    return """
     <html>
       <head><title>GenAI Inference Platform</title></head>
       <body>
@@ -118,4 +106,3 @@ def index():
       </body>
     </html>
     """
-    return HTMLResponse(html)
